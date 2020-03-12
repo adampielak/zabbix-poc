@@ -1,0 +1,6 @@
+---
+- hosts: zabbixAgents
+  remote_user: install
+  become: yes
+  roles:
+    - ansible-zabbix-agent

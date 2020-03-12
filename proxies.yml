@@ -1,0 +1,33 @@
+---
+- hosts: zabbixServersProxy
+  become: yes
+  remote_user: install
+  pre_tasks:
+    - name : Install python library for SELinux
+      yum:
+        name: libsemanage-python
+        state: present
+    - name: Install Official PostgreSQL yum repository files
+      yum:
+        name: "https://download.postgresql.org/pub/repos/yum/reporpms/EL-{{ ansible_distribution_version.split('.')[0] }}-x86_64/pgdg-redhat-repo-latest.noarch.rpm"
+        state: present
+      when: postgresql_enablerepo is defined and ansible_os_family == 'RedHat'
+
+  roles:
+    - ansible-role-postgresql
+    - ansible-zabbix-proxy
+  tasks:
+    - name: Authorize Zabbix Infra to connect Zabbix Servers
+      firewalld:
+        zone: trusted
+        source: 172.16.0.0/24
+        permanent: yes
+        state: enabled
+        immediate: yes
+    - name: Authorize connections on port 10051/tcp
+      firewalld:
+        zone: trusted
+        port: 10051/tcp
+        permanent: yes
+        state: enabled
+        immediate: yes

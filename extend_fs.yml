@@ -1,0 +1,36 @@
+---
+
+- name: "Extend / FileSystem | Check /dev/sda3 partition"
+  parted:
+    device: "{{ device }}"
+    number: "{{ partition }}"
+  register: partinfo
+  tags:
+    - deploy
+    - postinstall
+
+- set_fact: 
+    gap_kb: "{{ partinfo.disk.size - partinfo.partitions[vars.partition-1].end }}"
+  tags:
+    - deploy
+    - postinstall
+
+- name: "Extend / FileSystem | Resize /dev/sda3 partition"
+  #command: 'parted {{ device }} resizepart {{ partition }} 100%'
+  command: '/bin/growpart {{ device }} {{ partition }}'
+  when: gap_kb|int > 1024
+  register: growpart
+  tags:
+    - deploy
+    - postinstall
+
+- name: "Extend / FileSystem | Resize /"
+  filesystem:
+    device: "{{ device }}{{ partition }}"
+    fstype: xfs
+    resizefs: True
+  when: growpart is changed
+  tags:
+    - deploy
+    - postinstall
+

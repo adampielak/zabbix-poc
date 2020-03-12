@@ -1,0 +1,159 @@
+---
+- hosts: "{{ my_group }}"
+  gather_facts: False
+  remote_user : install
+  become: True
+  vars:
+    # Default variables
+    guest_domain: 'axelit.fr'
+    dns_server: '8.8.8.8'
+    datastore: 'Qnap_Labs'
+    datacenter: 'AXEL IT Datacenter'
+    cluster: 'Cluster AIT Labs'
+    vcenter_hostname: '192.168.1.29'
+    device: /dev/sda
+    partition: 3
+
+    vm_name: "{{ inventory_hostname }}"
+    vm_ip: "{{ ansible_host }}"
+    vcenter_username: '' # needed to be defined in environment variable VMWARE_USERNAME
+    vcenter_password: '' # needed to be defined in environment variable VMWARE_PASSWORD
+
+  tasks:
+  - name: Check mandatory variable vm_name
+    debug:
+      msg: "vm_name is required"
+    failed_when: vm_name is not defined
+    tags:
+      - deploy
+      - undeploy
+  - name: Check mandatory variable vm_ip
+    debug:
+      msg: "vm_ip is required"
+    failed_when: vm_ip is not defined
+    tags:
+      - deploy
+      - undeploy
+  - name: Get VMWARE_USERNAME for environment variable
+    set_fact:
+      vcenter_username: "{{ lookup('env', 'VMWARE_USERNAME') }}"
+    tags:
+      - deploy
+      - undeploy
+  - name: Get VMWARE_PASSWORD for environment variable
+    set_fact:
+      vcenter_password: "{{ lookup('env', 'VMWARE_PASSWORD') }}"
+    no_log: True
+    tags:
+      - deploy
+      - undeploy
+
+  - name: Clone a virtual machine from Linux template and customize
+    vmware_guest:
+      hostname: "{{ vcenter_hostname }}"
+      username: "{{ vcenter_username }}"
+      password: "{{ vcenter_password }}"
+      validate_certs: no
+      datacenter: "{{ datacenter }}"
+      state: "{{ state | default('poweredon', True) }}"
+      folder: "{{ folder | default('VM LABS/_Lab Zabbix/Zabbix_SBO', True) }}"
+      template: "{{ vm_template | default('Template_CENTOS_8', True) }}"
+      name: "{{ vm_name }}"
+      cluster: "{{ cluster }}"
+      force: "{{ force | default('False', True) }}"
+      wait_for_ip_address: True
+      wait_for_customization: True
+      networks:
+      - name: "{{ network_name | default('AxelIT_VLAN_3000', True) }}"
+        ip: "{{ vm_ip }}"
+        netmask: "{{ vm_netmask | default('255.255.0.0', True) }}"
+        gateway: "{{ vm_gateway | default('172.16.0.1', True) }}"
+        device_type: "{{ vm_nic_type | default('vmxnet3', True) }}"
+        start_connected: True
+        type: 'static'
+        dns_servers: "{{ dns_server }}"
+        domain: "{{ guest_domain }}"
+        allow_guest_control: True
+      customization:
+        existing_vm: True
+        hostname: "{{ vm_name }}"
+        domain: "{{ guest_domain }}"
+        dns_servers:
+        - "{{ dns_server }}"
+        dns_suffix:
+        - "{{ guest_domain }}"
+      disk:
+      - size_gb: "{{ vm_disk_gb | default(8, True) }}"
+        type: thin
+        datastore: "{{ datastore }}"
+      hardware:
+        memory_mb: "{{ vm_memory_gb | default(1, True) * 1024 }}"
+        num_cpus: "{{ vm_cpu_nbr | default(1, True) * vm_cpu_cores_nbr | default(1, True) }}"
+        num_cpu_cores_per_socket: "{{ vm_cpu_cores_nbr | default(1, True) }}"
+        scsi: paravirtual
+        memory_reservation_lock: False
+        mem_limit: 8096
+        mem_reservation: 0
+        cpu_limit: 8096
+        cpu_reservation: 0
+        max_connections: 40 
+        hotadd_cpu: True
+        hotremove_cpu: True
+        hotadd_memory: False
+        version: 9 # Hardware version of virtual machine
+        boot_firmware: bios
+    delegate_to: localhost
+    register: log_deploy
+    tags:
+      - deploy
+      - undeploy
+
+  - name: "Extend / FileSystem"
+    include_tasks: extend_fs.yml
+    when: vm_disk_gb is defined
+    tags:
+      - deploy
+      - postinstall
+
+  - name: "Add the inventory into /etc/hosts"
+    lineinfile:
+      dest: /etc/hosts
+      regexp: "^.*{{ item }}$"
+      line: "{{ hostvars[item]['ansible_host'] }} {{ item }}"
+      state: present
+    with_items: "{{ groups['all'] }}"
+    tags:
+      - deploy
+      - postinstall
+
+  - name: "Create your user account"
+    user:
+      name: "{{ item.name }}"
+      expires: -1
+    with_items: "{{ administrators }}" 
+    tags:
+      - deploy
+      - postinstall
+
+  - name: "Set authorized key"
+    authorized_key:
+      user: "{{ item.name }}"
+      state: present
+      key: "{{ item.ssh_pubkey }}"
+    with_items: "{{ administrators }}" 
+    tags:
+      - deploy
+      - postinstall
+
+  - name: "Configure sudo permissions and validate file"
+    lineinfile:
+      path: "/etc/sudoers.d/{{ item.name }}"
+      create: True
+      mode: '440'
+      state: present
+      line: '"{{ item.name }}" ALL=(ALL) NOPASSWD: ALL'
+      validate: /usr/sbin/visudo -cf %s
+    with_items: "{{ administrators }}" 
+    tags:
+      - deploy
+      - postinstall

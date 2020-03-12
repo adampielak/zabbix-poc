@@ -1,0 +1,63 @@
+---
+#- hosts: all
+#  become: yes
+#  tasks:
+#    - name: Add the inventory into /etc/hosts
+#      lineinfile:
+#        dest: /etc/hosts
+#        regexp: "^.*{{ item }}$"
+#        line: "{{ hostvars[item]['ansible_default_ipv4']['address'] }} {{ item }}"
+#        state: present
+#      with_items: "{{ groups['all'] }}"
+
+- hosts: zabbixServers
+  become: yes
+  remote_user: install
+  tasks:
+    - name: Install Official PostgreSQL yum repository files
+      yum:
+        name: "https://download.postgresql.org/pub/repos/yum/reporpms/EL-{{ ansible_distribution_version.split('.')[0] }}-x86_64/pgdg-redhat-repo-latest.noarch.rpm"
+        state: present
+      when: postgresql_enablerepo is defined and ansible_os_family == 'RedHat'
+
+- hosts: zabbixServersPostgresql
+  become: yes
+  remote_user: install
+  roles:
+    - ansible-role-postgresql
+  tasks:
+    - name: Authorize SQL connections on firewalld through Zabbix Servers
+      firewalld:
+        zone: trusted
+        source: 172.16.0.0/24
+        permanent: yes
+        state: enabled
+        immediate: yes
+    - name: Authorize connections on port 5432/tcp
+      firewalld:
+        zone: trusted
+        port: 5432/tcp
+        permanent: yes
+        state: enabled
+        immediate: yes
+
+- hosts: zabbixServersCore
+  become: yes
+  remote_user: install
+  roles:
+    - ansible-zabbix-server
+  tasks:
+    - name: Authorize Zabbix Infra to connect Zabbix Servers
+      firewalld:
+        zone: trusted
+        source: 172.16.0.0/24
+        permanent: yes
+        state: enabled
+        immediate: yes
+    - name: Authorize connections on port 10051/tcp
+      firewalld:
+        zone: trusted
+        port: 10051/tcp
+        permanent: yes
+        state: enabled
+        immediate: yes

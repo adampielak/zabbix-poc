@@ -1,0 +1,13 @@
+---
+- hosts: zabbixServersWeb
+  become: yes
+  roles:
+    - ansible-zabbix-web
+  tasks:
+    - name: Authorize HTTP traffic
+      firewalld:
+        zone: public
+        service: http
+        permanent: yes
+        state: enabled
+        immediate: yes
