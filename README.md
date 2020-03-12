@@ -2,12 +2,14 @@
 
 ## Install miniconda3 into /opt with root privileges (1 time on the server)
 
+    # sudo su -
     # curl https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -o Miniconda3-latest-Linux-x86_64.sh
     # chmod +x Miniconda3-latest-Linux-x86_64.sh
     # ./Miniconda3-latest-Linux-x86_64.sh -b -p /opt/miniconda3
     # rm Miniconda3-latest-Linux-x86_64.sh
+    # logout
 
-## Initialize python environment
+## Initialize your python environment
 
     # /opt/miniconda3/bin/conda init bash
     # logout
